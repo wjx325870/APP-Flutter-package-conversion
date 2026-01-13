@@ -1,15 +1,36 @@
 name: Build Android APK
+
+# 触发方式：手动在 GitHub Actions 页面点击触发
 on: [workflow_dispatch]
+
 jobs:
   build:
+    # 使用 GitHub 提供的 Ubuntu 最新版虚拟机
     runs-on: ubuntu-latest
+
     steps:
+      # 1. 获取你的项目代码
       - uses: actions/checkout@v4
+
+      # 2. 安装并设置指定版本的 Flutter 环境
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
-      - run: flutter pub get
-      - run: flutter build apk --release
+          # 指定一个具体的 Flutter 稳定版本，避免网络解析问题
+          flutter-version: '3.16.0'
+
+      # 3. 自动接受 Android SDK 许可（关键步骤，避免交互式提示）
+      - name: Accept Android Licenses
+        run: flutter doctor --android-licenses -y
+
+      # 4. 获取项目依赖（pubspec.yaml 中定义的包）
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 5. 构建发布版 APK
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      # 6. 将构建好的 APK 上传，供下载
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
