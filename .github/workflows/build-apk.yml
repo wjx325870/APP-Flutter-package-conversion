@@ -1,36 +1,43 @@
 name: Build Android APK
-
-# 触发方式：手动在 GitHub Actions 页面点击触发
 on: [workflow_dispatch]
 
 jobs:
   build:
-    # 使用 GitHub 提供的 Ubuntu 最新版虚拟机
     runs-on: ubuntu-latest
-
     steps:
-      # 1. 获取你的项目代码
       - uses: actions/checkout@v4
 
-      # 2. 安装并设置指定版本的 Flutter 环境
+      # 1. 设置构建所需的Java环境（Android SDK必须）
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      # 2. 设置Flutter环境（沿用有效的具体版本）
       - uses: subosito/flutter-action@v2
         with:
-          # 指定一个具体的 Flutter 稳定版本，避免网络解析问题
           flutter-version: '3.16.0'
+          # 同时安装Android SDK，并设置一个较新的SDK版本和构建工具
+          android-licenses: true
+          android-sdk: "platform-tools"
+          android-platform: "android-33"
+          android-build-tools: "33.0.0"
 
-      # 3. 自动接受 Android SDK 许可（关键步骤，避免交互式提示）
-      - name: Accept Android Licenses
-        run: flutter doctor --android-licenses -y
+      # 3. 【关键】用更底层、更可靠的方式预先接受所有Android许可证
+      - name: Accept All Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          flutter doctor --android-licenses -y
 
-      # 4. 获取项目依赖（pubspec.yaml 中定义的包）
+      # 4. 获取项目依赖
       - name: Install Dependencies
         run: flutter pub get
 
-      # 5. 构建发布版 APK
+      # 5. 构建APK
       - name: Build APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      # 6. 将构建好的 APK 上传，供下载
+      # 6. 上传生成的APK
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
