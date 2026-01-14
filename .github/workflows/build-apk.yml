@@ -1,32 +1,35 @@
-name: Build APK
+name: Build Android APK
 on: [workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      CI: true
     steps:
       - uses: actions/checkout@v4
-      # 核心：自动解压ZIP并进入正确目录
-      - name: Extract and Prepare Project
-        run: |
-          unzip -o LuaMobileIDE-LUS.zip
-          cd LuaMobileIDE
-          mv * .[^.]* .. 2>/dev/null || true # 移动所有文件到根目录
-          cd ..
-          ls -la # 确认文件已到位
+
       - uses: actions/setup-java@v3
-        with: { distribution: 'temurin', java-version: '17' }
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
           android: true
           android-licenses: accept
-      - name: Build
+
+      - name: Clean and Build
         run: |
+          # 1. 删除可能引起问题的备份文件
+          rm -f pubspec.yaml.bak README.md.bak
+          # 2. 清理并重建
+          flutter clean
+          flutter pub cache repair
           flutter pub get
-          flutter build apk --release --no-tree-shake-icons
+          # 3. 以详细模式构建，便于出错时诊断
+          flutter build apk --release --no-tree-shake-icons --verbose
+
       - uses: actions/upload-artifact@v4
         with:
-          name: app
+          name: app-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
