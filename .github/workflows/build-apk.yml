@@ -4,44 +4,47 @@ on: [workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
+    env: # 关键：设置环境变量以禁用所有交互
+      FLUTTER_ROOT: /opt/hostedtoolcache/flutter
+      CI: true # 明确声明为持续集成环境
+      ADB_INSTALL_TIMEOUT: 10
+
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 设置正确版本的Java环境（关键修复）
+      # 1. 设置Java 17（必须）
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '17' # 必须为17，与Android SDK匹配
+          java-version: '17'
 
-      # 2. 设置Flutter环境，并让它来管理Android SDK
+      # 2. 【核心改变】使用经过特殊配置的Flutter Action
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.16.0'
-          # 开启此选项，让Action自动安装并配置Android SDK
+          # 启用并静默安装Android SDK，不等待交互
           android: true
+          android-licenses: accept # 关键：直接在安装时接受
+          android-sdk: "platform-tools;33.0.3"
+          android-platform: "android-33"
+          android-build-tools: "33.0.0"
 
-      # 3. 【核心】使用社区验证的脚本接受许可证
-      - name: Accept Android Licenses (Headless Fix)
+      # 3. 静默创建许可证文件（绕过任何检查）
+      - name: Force Accept Licenses (Silent)
         run: |
-          # 创建许可证预接受文件
-          mkdir -p ~/.android
-          touch ~/.android/repositories.cfg
-          # 使用yes命令自动对所有SDK管理器提示回答'y'
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          # 再次通过flutter命令确保许可被记录
-          flutter doctor --android-licenses -y
+          mkdir -p $ANDROID_HOME/licenses
+          echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $ANDROID_HOME/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_HOME/licenses/android-sdk-preview-license
+          echo -e "d56f5187479451eabf01fb78af6dfcb131a6481e" > $ANDROID_HOME/licenses/android-sdk-arm-dbt-license
+          echo -e "所有许可证已通过文件预置接受。"
 
-      # 4. 验证环境并获取依赖
-      - name: Verify Environment & Get Dependencies
+      # 4. 直接进行构建（跳过 doctor 检查）
+      - name: Install Dependencies and Build
         run: |
-          flutter doctor -v
           flutter pub get
+          flutter build apk --release --no-tree-shake-icons
 
-      # 5. 构建APK
-      - name: Build APK
-        run: flutter build apk --release --no-tree-shake-icons
-
-      # 6. 上传APK
+      # 5. 上传APK
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
