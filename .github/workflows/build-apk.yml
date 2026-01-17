@@ -6,90 +6,75 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FLUTTER_VERSION: '3.16.0'
-      ANDROID_SDK_VERSION: '33'
-      ANDROID_BUILD_TOOLS: '33.0.0'
 
     steps:
-      # 1. 拉取仓库代码（包含ZIP文件）
+      # 1. 拉取仓库代码
       - uses: actions/checkout@v4
 
-      # 2. 设置Java 17环境（Android构建必需）
+      # 2. 设置Java 17环境
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. 安装Flutter及Android SDK（自动接受许可证）
+      # 3. 安装Android SDK（使用社区维护的Action）
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+        with:
+          licenses: accept
+
+      # 4. 安装Flutter（仅安装Flutter，不带Android参数）
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          android: true
-          android-licenses: accept
-          android-sdk: "platform-tools;${{ env.ANDROID_SDK_VERSION }}"
-          android-platform: "android-${{ env.ANDROID_SDK_VERSION }}"
-          android-build-tools: "${{ env.ANDROID_BUILD_TOOLS }}"
 
-      # 4. 详细诊断环境（便于排查）
-      - name: Environment Diagnostics
+      # 5. 验证环境
+      - name: Verify Environment
         run: |
-          echo "=== 环境诊断 ==="
+          echo "=== 环境信息 ==="
           java -version
           flutter --version
-          flutter doctor -v
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          ls -la $ANDROID_HOME
 
-      # 5. 解压、进入项目目录并构建（关键步骤）
+      # 6. 解压、进入项目目录并构建
       - name: Extract and Build Project
         run: |
-          echo "=== 开始处理ZIP文件 ==="
+          echo "=== 处理ZIP文件 ==="
           
-          # 验证ZIP文件存在
+          # 检查ZIP文件
           ls -lh *.zip
           
-          # 解压ZIP文件（假设文件名为LuaMobileIDE-LUS.zip）
+          # 解压ZIP文件
           unzip -o LuaMobileIDE-LUS.zip
           
-          # 进入项目目录（根据您的ZIP包结构）
+          # 进入项目目录
           cd LuaMobileIDE
           
-          echo "=== 项目目录结构 ==="
+          echo "=== 项目结构 ==="
           pwd
           ls -la
           
-          echo "=== 检查核心文件 ==="
+          echo "=== 核心文件检查 ==="
           [ -f "pubspec.yaml" ] && echo "✅ pubspec.yaml存在" || echo "❌ pubspec.yaml缺失"
           [ -d "lib" ] && echo "✅ lib目录存在" || echo "❌ lib目录缺失"
           [ -d "android" ] && echo "✅ android目录存在" || echo "❌ android目录缺失"
           
-          echo "=== 构建前准备 ==="
-          flutter clean
+          # 显示pubspec.yaml内容
+          echo "=== pubspec.yaml内容 ==="
+          head -20 pubspec.yaml
           
-          echo "=== 获取依赖 ==="
+          echo "=== 开始构建流程 ==="
+          flutter clean
           flutter pub get
           
-          echo "=== 开始构建APK ==="
-          flutter build apk --release \
-            --no-tree-shake-icons \
-            --verbose \
-            --target-platform android-arm,android-arm64
-          
-          echo "=== 构建完成 ==="
-          ls -lh build/app/outputs/flutter-apk/
+          # 构建APK（去掉日志上传部分，简化流程）
+          flutter build apk --release --no-tree-shake-icons
 
-      # 6. 上传构建产物（APK文件）
+      # 7. 上传APK文件
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
           path: LuaMobileIDE/build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
-
-      # 7. 上传构建日志（便于调试）
-      - name: Upload Build Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            ${{ github.workspace }}/**/*.log
-            ${{ github.workspace }}/flutter-build.log
           retention-days: 7
