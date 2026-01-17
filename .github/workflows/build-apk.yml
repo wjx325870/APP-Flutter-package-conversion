@@ -1,78 +1,100 @@
-name: Build APK from LuaMobileIDE ZIP
+name: Build APK - 终极稳定版
 on: [workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FLUTTER_VERSION: '3.16.0'
 
     steps:
-      # 1. 拉取仓库代码
+      # 1. 拉取代码（包含你的ZIP文件）
       - uses: actions/checkout@v4
 
-      # 2. 设置Java 17环境
+      # 2. 安装Java 17（Android SDK必需）
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. 安装Android SDK（使用社区维护的Action）
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
-        with:
-          licenses: accept
-
-      # 4. 安装Flutter（仅安装Flutter，不带Android参数）
+      # 3. 安装Flutter（只安装基础环境）
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: '3.16.0'  # 使用具体的稳定版本
+
+      # 4. 手动安装Android SDK和接受许可证（最可靠的方法）
+      - name: Setup Android SDK Manually
+        run: |
+          echo "=== 开始安装Android SDK ==="
+          
+          # 下载命令行工具
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          unzip -q commandlinetools-linux-9477386_latest.zip -d $HOME/android-sdk/cmdline-tools
+          mv $HOME/android-sdk/cmdline-tools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
+          
+          # 设置环境变量
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          
+          # 安装必要的Android SDK组件
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+          
+          # 强制接受所有许可证（关键步骤）
+          mkdir -p $HOME/android-sdk/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/android-sdk/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk/licenses/android-sdk-preview-license
+          
+          echo "✅ Android SDK安装完成"
 
       # 5. 验证环境
       - name: Verify Environment
         run: |
-          echo "=== 环境信息 ==="
+          echo "=== 环境验证 ==="
+          echo "Java版本:"
           java -version
+          echo ""
+          echo "Flutter版本:"
           flutter --version
-          echo "ANDROID_HOME: $ANDROID_HOME"
-          ls -la $ANDROID_HOME
+          echo ""
+          echo "Android SDK位置: $ANDROID_HOME"
+          echo "Android组件列表:"
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --list | grep -E "(platforms|build-tools)" | head -10
 
-      # 6. 解压、进入项目目录并构建
-      - name: Extract and Build Project
+      # 6. 解压并构建你的项目
+      - name: Build Your Project
         run: |
-          echo "=== 处理ZIP文件 ==="
+          echo "=== 开始构建项目 ==="
           
-          # 检查ZIP文件
-          ls -lh *.zip
-          
-          # 解压ZIP文件
+          # 1. 解压你的ZIP文件
+          echo "1. 解压项目文件..."
           unzip -o LuaMobileIDE-LUS.zip
           
-          # 进入项目目录
+          # 2. 进入项目目录
           cd LuaMobileIDE
           
-          echo "=== 项目结构 ==="
-          pwd
+          # 3. 显示项目结构
+          echo "2. 项目结构:"
           ls -la
           
-          echo "=== 核心文件检查 ==="
-          [ -f "pubspec.yaml" ] && echo "✅ pubspec.yaml存在" || echo "❌ pubspec.yaml缺失"
-          [ -d "lib" ] && echo "✅ lib目录存在" || echo "❌ lib目录缺失"
-          [ -d "android" ] && echo "✅ android目录存在" || echo "❌ android目录缺失"
-          
-          # 显示pubspec.yaml内容
-          echo "=== pubspec.yaml内容 ==="
-          head -20 pubspec.yaml
-          
-          echo "=== 开始构建流程 ==="
+          # 4. 清理并获取依赖
+          echo "3. 清理和获取依赖..."
           flutter clean
           flutter pub get
           
-          # 构建APK（去掉日志上传部分，简化流程）
-          flutter build apk --release --no-tree-shake-icons
+          # 5. 开始构建APK
+          echo "4. 开始构建APK（这可能需要几分钟）..."
+          flutter build apk --release \
+            --no-tree-shake-icons \
+            --target-platform android-arm64 \
+            --verbose
+          
+          echo "✅ 构建完成！"
+          
+          # 6. 显示生成的APK
+          echo "生成的APK文件:"
+          ls -lh build/app/outputs/flutter-apk/
 
       # 7. 上传APK文件
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
